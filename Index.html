@@ -2,15 +2,28 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bubu 💖</title>
 
 <style>
+  :root{
+    --bg1: #ffe6f0;
+    --bg2: #fff;
+    --pink: #ff4d6d;
+    --green: #2ecc71;
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
   body {
     margin: 0;
     height: 100vh;
     overflow: hidden;
     font-family: 'Poppins', sans-serif;
-    background: linear-gradient(135deg, #ffe6f0, #fff);
+    background: linear-gradient(135deg, var(--bg1), var(--bg2));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -18,10 +31,11 @@
 
   .card {
     text-align: center;
-    z-index: 2;
+    z-index: 3;
+    max-width: 90%;
   }
 
-  img {
+  img.hero {
     width: 230px;
     animation: float 3s ease-in-out infinite;
   }
@@ -50,17 +64,17 @@
     font-size: 16px;
     cursor: pointer;
     position: absolute;
-    transition: 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease;
   }
 
   #yes {
-    background: #ff4d6d;
+    background: var(--pink);
     color: white;
     left: 0;
   }
 
   #no {
-    background: #2ecc71;
+    background: var(--green);
     color: white;
     right: 0;
   }
@@ -84,8 +98,9 @@
     top: -20px;
     font-size: 20px;
     animation: fall linear forwards;
-    color: #ff4d6d;
-    z-index: 1;
+    color: var(--pink);
+    z-index: 2;
+    pointer-events: none;
   }
 
   @keyframes fall {
@@ -94,27 +109,38 @@
       opacity: 0;
     }
   }
+
+  /* Ensure result is above hearts */
+  #result {
+    z-index: 4;
+  }
+
+  /* Responsive tweaks */
+  @media (max-width: 420px) {
+    img.hero { width: 160px; }
+    .buttons { width: 260px; height: 90px; }
+  }
 </style>
 </head>
 
 <body>
 
-<audio id="loveSound">
+<audio id="loveSound" preload="auto" playsinline>
   <source src="https://assets.mixkit.co/sfx/preview/mixkit-cartoon-kiss-1085.mp3" type="audio/mpeg">
 </audio>
 
-<div class="card" id="main">
-  <img src="https://i.pinimg.com/564x/9e/9b/7f/9e9b7f8c9b4e0f63f2c0d55dcd0c8b9a.jpg">
-  <h1>Naraz ho kya? 🥺</h1>
+<div class="card" id="main" role="region" aria-labelledby="mainTitle">
+  <img class="hero" src="https://i.pinimg.com/564x/9e/9b/7f/9e9b7f8c9b4e0f63f2c0d55dcd0c8b9a.jpg" alt="Cute character">
+  <h1 id="mainTitle">Naraz ho kya? 🥺</h1>
 
-  <div class="buttons">
-    <button id="yes">YES 😤</button>
-    <button id="no">NO 💕</button>
+  <div class="buttons" role="group" aria-label="Response buttons">
+    <button id="yes" aria-label="Yes, I'm angry">YES 😤</button>
+    <button id="no" aria-label="No, I forgive you">NO 💕</button>
   </div>
 </div>
 
-<div class="card hidden" id="result">
-  <img src="https://i.pinimg.com/564x/2c/8c/0b/2c8c0b1fcbf9b6b8fbc4c6f7c62e9b31.jpg">
+<div class="card hidden" id="result" role="status" aria-live="polite">
+  <img src="https://i.pinimg.com/564x/2c/8c/0b/2c8c0b1fcbf9b6b8fbc4c6f7c62e9b31.jpg" alt="Happy character">
   <h1 class="love">That’s my bubu 💖🥰</h1>
 </div>
 
@@ -125,34 +151,72 @@
   const result = document.getElementById("result");
   const sound = document.getElementById("loveSound");
 
+  // Track heart interval so we can avoid duplicates and clear it
+  let heartIntervalId = null;
+
   function moveYes() {
-    const x = Math.random() * 240 - 120;
+    // smaller movement on very small screens
+    const maxX = Math.min(240, window.innerWidth * 0.5);
+    const x = Math.random() * maxX - maxX / 2;
     const y = Math.random() * 120 - 60;
     yes.style.transform = `translate(${x}px, ${y}px)`;
   }
 
+  // Move on mouseenter and when focused (keyboard users)
   yes.addEventListener("mouseenter", moveYes);
-  yes.addEventListener("touchstart", moveYes);
+  yes.addEventListener("focus", moveYes);
+  // touchstart to make button "slippery" on touch devices
+  yes.addEventListener("touchstart", (e) => {
+    // prevent generating a synthetic mouse event that could click the button
+    e.preventDefault();
+    moveYes();
+  }, {passive: false});
 
   noBtn.addEventListener("click", () => {
-    sound.play();
+    // play audio: user gesture so should be allowed; handle promise rejections
+    sound.play().catch(() => {});
+    // hide main and show result
     main.classList.add("hidden");
     result.classList.remove("hidden");
+    // disable button so user can't re-trigger repeatedly
+    noBtn.disabled = true;
     startHearts();
   });
 
   function startHearts() {
-    setInterval(() => {
+    if (heartIntervalId !== null) return; // already started
+    // create hearts for a limited duration (e.g. 10s) to avoid runaway
+    heartIntervalId = setInterval(() => {
       const heart = document.createElement("div");
       heart.className = "heart";
-      heart.innerHTML = "💖";
+      heart.textContent = "💖";
       heart.style.left = Math.random() * 100 + "vw";
-      heart.style.animationDuration = Math.random() * 2 + 3 + "s";
+      const duration = Math.random() * 2 + 3; // 3s to 5s
+      heart.style.animationDuration = duration + "s";
       document.body.appendChild(heart);
 
-      setTimeout(() => heart.remove(), 5000);
+      // Remove after animation end + small buffer
+      setTimeout(() => {
+        heart.remove();
+      }, (duration + 0.2) * 1000);
     }, 250);
+
+    // stop creating new hearts after 10 seconds
+    setTimeout(() => {
+      if (heartIntervalId !== null) {
+        clearInterval(heartIntervalId);
+        heartIntervalId = null;
+      }
+    }, 10_000);
   }
+
+  // Optional: clean up if user navigates away
+  window.addEventListener('beforeunload', () => {
+    if (heartIntervalId !== null) {
+      clearInterval(heartIntervalId);
+      heartIntervalId = null;
+    }
+  });
 </script>
 
 </body>
